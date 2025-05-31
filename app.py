@@ -14,10 +14,19 @@ REDIRECT_URL = "https://web-tiw-f6am2usgmpzwel2adoj5qg.streamlit.app/"  # ต้
 def generate_login_url():
     timestamp = int(time.time())
     base_url = "https://partner.test-stable.shopeemobile.com/api/v2/shop/auth_partner"
+
+    # ใช้ redirect แบบ raw สำหรับ sign
     sign_base = f"{PARTNER_ID}{REDIRECT_URL}{timestamp}"
     sign = hmac.new(PARTNER_KEY.encode(), sign_base.encode(), hashlib.sha256).hexdigest()
+
+    # encode redirect สำหรับ URL จริง
     redirect_encoded = urllib.parse.quote(REDIRECT_URL, safe="")
-    login_url = f"{base_url}?partner_id={PARTNER_ID}&redirect={redirect_encoded}&timestamp={timestamp}&sign={sign}"
+    login_url = (
+        f"{base_url}?partner_id={PARTNER_ID}"
+        f"&redirect={redirect_encoded}"
+        f"&timestamp={timestamp}"
+        f"&sign={sign}"
+    )
     return login_url
 
 # ====== หน้าเว็บ ======
