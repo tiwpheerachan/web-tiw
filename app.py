@@ -30,20 +30,21 @@ def generate_login_url():
     return login_url
 
 # ====== หน้าเว็บ ======
-st.title("\U0001f511 Shopee OAuth Login")
+st.set_page_config(page_title="Shopee OAuth Login", page_icon="🔑")
+st.title("🔑 Shopee OAuth Login")
 
 query_params = st.query_params
 code = query_params.get("code", [None])[0]
+shop_id = query_params.get("shop_id", [None])[0]
 
-if code:
-    st.success(f"ได้รับ code: {code}")
-    st.write("\U0001f447 ดึง access token ได้ตรงนี้:")
+if code and shop_id:
+    st.success(f"✅ ได้รับ code: `{code}` และ shop_id: `{shop_id}`")
+    st.write("👉 เรียก Shopee API เพื่อดึง Access Token:")
 
     url = "https://partner.test-stable.shopeemobile.com/api/v2/auth/token/get"
     timestamp = int(time.time())
-
-    shop_id = query_params.get("shop_id", [None])[0]
-    sign_base = f"{PARTNER_ID}/api/v2/auth/token/get{timestamp}{code}"
+    path = "/api/v2/auth/token/get"
+    sign_base = f"{PARTNER_ID}{path}{timestamp}{code}"
     sign = hmac.new(PARTNER_KEY.encode(), sign_base.encode(), hashlib.sha256).hexdigest()
 
     headers = {"Content-Type": "application/json"}
@@ -54,13 +55,18 @@ if code:
     }
     json_data = {
         "code": code,
-        "shop_id": int(shop_id) if shop_id else None,
+        "shop_id": int(shop_id),
         "partner_id": PARTNER_ID
     }
 
-    res = requests.post(url, headers=headers, params=params, json=json_data)
-    st.json(res.json())
-
+    try:
+        res = requests.post(url, headers=headers, params=params, json=json_data)
+        res.raise_for_status()
+        st.success("🎉 Access Token Response:")
+        st.json(res.json())
+    except Exception as e:
+        st.error(f"❌ เกิดข้อผิดพลาด: {e}")
 else:
+    st.info("👇 กรุณาคลิกปุ่มเพื่อเริ่มต้นการ Login กับ Shopee")
     login_url = generate_login_url()
-    st.markdown(f"[\U0001f7e2 คลิกเพื่อ Login Shopee]({login_url})")
+    st.markdown(f"[🟢 คลิกเพื่อ Login Shopee]({login_url})")
