@@ -8,18 +8,18 @@ import urllib.parse
 # ===== ตั้งค่าแอป Shopee =====
 PARTNER_ID = 1280109
 PARTNER_KEY = "426d64704149597959665661444854666f417a69786e626a656d70454b76534e"
-REDIRECT_URL = "https://web-tiw-f6am2usgmpzwel2adoj5qg.streamlit.app/"  # ต้องตรงกับใน Shopee Developer Console
+REDIRECT_URL = "https://web-tiw-f6am2usgmpzwel2adoj5qg.streamlit.app/"  # ต้องตรงกับใน Shopee Console (รวม / ท้ายสุดด้วย)
 
 # ===== Function สร้างลิงก์ login =====
 def generate_login_url():
     timestamp = int(time.time())
     base_url = "https://partner.test-stable.shopeemobile.com/api/v2/shop/auth_partner"
 
-    # ใช้ redirect แบบ raw สำหรับ sign
+    # ใช้ redirect แบบตรงเป๊ะจาก Shopee Console (รวม / ท้ายสุด)
     sign_base = f"{PARTNER_ID}{REDIRECT_URL}{timestamp}"
     sign = hmac.new(PARTNER_KEY.encode(), sign_base.encode(), hashlib.sha256).hexdigest()
 
-    # encode redirect สำหรับ URL จริง
+    # URL encode สำหรับ redirect
     redirect_encoded = urllib.parse.quote(REDIRECT_URL, safe="")
     login_url = (
         f"{base_url}?partner_id={PARTNER_ID}"
