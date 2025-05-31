@@ -8,27 +8,27 @@ import urllib.parse
 # ===== ตั้งค่าแอป Shopee =====
 PARTNER_ID = 1280109
 PARTNER_KEY = "426d64704149597959665661444854666f417a69786e626a656d70454b76534e"
-REDIRECT_URL = "https://web-tiw-f6am2usgmpzwel2adoj5qg.streamlit.app/"  # เปลี่ยนเป็นโดเมนจริงของคุณ
+REDIRECT_URL = "https://web-tiw-f6am2usgmpzwel2adoj5qg.streamlit.app/"  # ต้องตรงกับใน Shopee Developer Console
 
 # ===== Function สร้างลิงก์ login =====
 def generate_login_url():
     timestamp = int(time.time())
     base_url = "https://partner.test-stable.shopeemobile.com/api/v2/shop/auth_partner"
-    redirect = urllib.parse.quote(REDIRECT_URL, safe="")
     sign_base = f"{PARTNER_ID}{REDIRECT_URL}{timestamp}"
     sign = hmac.new(PARTNER_KEY.encode(), sign_base.encode(), hashlib.sha256).hexdigest()
-    login_url = f"{base_url}?partner_id={PARTNER_ID}&redirect={redirect}&timestamp={timestamp}&sign={sign}"
+    redirect_encoded = urllib.parse.quote(REDIRECT_URL, safe="")
+    login_url = f"{base_url}?partner_id={PARTNER_ID}&redirect={redirect_encoded}&timestamp={timestamp}&sign={sign}"
     return login_url
 
 # ====== หน้าเว็บ ======
-st.title("🔑 Shopee OAuth Login")
+st.title("\U0001f511 Shopee OAuth Login")
 
 query_params = st.query_params
 code = query_params.get("code", [None])[0]
 
 if code:
     st.success(f"ได้รับ code: {code}")
-    st.write("👇 ดึง access token ได้ตรงนี้:")
+    st.write("\U0001f447 ดึง access token ได้ตรงนี้:")
 
     url = "https://partner.test-stable.shopeemobile.com/api/v2/auth/token/get"
     timestamp = int(time.time())
@@ -54,4 +54,4 @@ if code:
 
 else:
     login_url = generate_login_url()
-    st.markdown(f"[🟢 คลิกเพื่อ Login Shopee]({login_url})")
+    st.markdown(f"[\U0001f7e2 คลิกเพื่อ Login Shopee]({login_url})")
