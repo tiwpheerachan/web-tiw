@@ -5,27 +5,27 @@ import hashlib
 import hmac
 import urllib.parse
 
-# ===== ตั้งค่าแอป Shopee =====
+# ===== ตั้งค่าแอป Shopee (Sandbox/Test) =====
 PARTNER_ID = 1280109
 PARTNER_KEY = "426d64704149597959665661444854666f417a69786e626a656d70454b76534e"
-REDIRECT_URL = "https://web-tiw-f6am2usgmpzwel2adoj5qg.streamlit.app"  # ต้องตรงกับใน Shopee Console (รวม / ท้ายสุดด้วย)
+REDIRECT_URL = "https://web-tiw-f6am2usgmpzwel2adoj5qg.streamlit.app/"  # ต้องตรงกับ Shopee Console แบบเป๊ะ (รวม / ท้ายสุด)
 
-# ===== Function สร้างลิงก์ login =====
+# ===== Function สร้างลิงก์ login Shopee =====
 def generate_login_url():
     timestamp = int(time.time())
-    base_url = "https://partner.test-stable.shopeemobile.com/api/v2/shop/auth_partner"
+    path = "/api/v2/shop/auth_partner"
+    base_url = f"https://partner.test-stable.shopeemobile.com{path}"
 
-    # ใช้ redirect แบบตรงเป๊ะจาก Shopee Console (รวม / ท้ายสุด)
-    sign_base = f"{PARTNER_ID}{REDIRECT_URL}{timestamp}"
+    # sign base ตาม Shopee: partner_id + path + timestamp
+    sign_base = f"{PARTNER_ID}{path}{timestamp}"
     sign = hmac.new(PARTNER_KEY.encode(), sign_base.encode(), hashlib.sha256).hexdigest()
 
-    # URL encode สำหรับ redirect
     redirect_encoded = urllib.parse.quote(REDIRECT_URL, safe="")
     login_url = (
         f"{base_url}?partner_id={PARTNER_ID}"
-        f"&redirect={redirect_encoded}"
         f"&timestamp={timestamp}"
         f"&sign={sign}"
+        f"&redirect={redirect_encoded}"
     )
     return login_url
 
