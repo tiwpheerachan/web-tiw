@@ -8,7 +8,7 @@ import urllib.parse
 # ===== ตั้งค่าแอป Shopee =====
 PARTNER_ID = 1280109
 PARTNER_KEY = "426d64704149597959665661444854666f417a69786e626a656d70454b76534e"
-REDIRECT_URL = "https://web-tiw-f6am2usgmpzwel2adoj5qg.streamlit.app/"  # ต้องตรงกับใน Shopee Console (รวม / ท้ายสุดด้วย)
+REDIRECT_URL = "https://web-tiw-f6am2usgmpzwel2adoj5qg.streamlit.app"  # ต้องตรงกับใน Shopee Console (รวม / ท้ายสุดด้วย)
 
 # ===== Function สร้างลิงก์ login =====
 def generate_login_url():
