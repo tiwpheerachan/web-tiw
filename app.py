@@ -8,7 +8,7 @@ import urllib.parse
 # ===== ตั้งค่าแอป Shopee =====
 PARTNER_ID = 1280109
 PARTNER_KEY = "426d64704149597959665661444854666f417a69786e626a656d70454b76534e"
-REDIRECT_URL = "https://your-app-name.streamlit.app/"  # เปลี่ยนตอน deploy จริง
+REDIRECT_URL = "https://web-tiw-f6am2usgmpzwel2adoj5qg.streamlit.app/"  # เปลี่ยนเป็นโดเมนจริงของคุณ
 
 # ===== Function สร้างลิงก์ login =====
 def generate_login_url():
@@ -23,7 +23,7 @@ def generate_login_url():
 # ====== หน้าเว็บ ======
 st.title("🔑 Shopee OAuth Login")
 
-query_params = st.experimental_get_query_params()
+query_params = st.query_params
 code = query_params.get("code", [None])[0]
 
 if code:
