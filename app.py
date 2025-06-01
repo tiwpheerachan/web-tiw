@@ -16,7 +16,7 @@ def generate_login_url():
     path = "/api/v2/shop/auth_partner"
     base_url = f"https://partner.test-stable.shopeemobile.com{path}"
 
-    # sign base ตาม Shopee: partner_id + path + timestamp
+    # สร้าง sign ด้วย partner_id + path + timestamp
     sign_base = f"{PARTNER_ID}{path}{timestamp}"
     sign = hmac.new(PARTNER_KEY.encode(), sign_base.encode(), hashlib.sha256).hexdigest()
 
@@ -44,7 +44,9 @@ if code and shop_id:
     url = "https://partner.test-stable.shopeemobile.com/api/v2/auth/token/get"
     timestamp = int(time.time())
     path = "/api/v2/auth/token/get"
-    sign_base = f"{PARTNER_ID}{path}{timestamp}{code}"
+    
+    # ✅ แก้ base string ให้ถูกต้อง: partner_id + path + timestamp
+    sign_base = f"{PARTNER_ID}{path}{timestamp}"
     sign = hmac.new(PARTNER_KEY.encode(), sign_base.encode(), hashlib.sha256).hexdigest()
 
     headers = {"Content-Type": "application/json"}
@@ -64,6 +66,8 @@ if code and shop_id:
         res.raise_for_status()
         st.success("🎉 Access Token Response:")
         st.json(res.json())
+    except requests.exceptions.HTTPError as http_err:
+        st.error(f"❌ HTTP error: {http_err}\n{res.text}")
     except Exception as e:
         st.error(f"❌ เกิดข้อผิดพลาด: {e}")
 else:
