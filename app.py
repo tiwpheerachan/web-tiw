@@ -6,9 +6,10 @@ import hmac
 import urllib.parse
 import json
 
-# ===== ตั้งค่าแอป Shopee (Sandbox/Test) =====
+# ===== ตั้งค่าแอป Shopee (ใช้ข้อมูลจริงจากรูป) =====
 PARTNER_ID = 1280109
-PARTNER_KEY = "426d64704149597959665661444854666f417a69786e626a656d70454b76534e"
+# ⚠️ คุณต้องใส่ Partner Key จริงที่ไม่ได้ซ่อนด้วย * ที่นี่
+PARTNER_KEY = "YOUR_ACTUAL_PARTNER_KEY_HERE"  # แทนที่ด้วย key จริง
 REDIRECT_URL = "https://web-tiw-f6am2usgmpzwel2adoj5qg.streamlit.app/"
 
 # ===== Function สร้างลิงก์ login Shopee =====
@@ -30,7 +31,7 @@ def generate_login_url():
     )
     return login_url
 
-# ===== Function ดึง Access Token =====
+# ===== Function ดึง Access Token (แก้ไขแล้ว) =====
 def get_access_token(code, shop_id):
     url = "https://partner.test-stable.shopeemobile.com/api/v2/auth/token/get"
     timestamp = int(time.time())
@@ -43,10 +44,10 @@ def get_access_token(code, shop_id):
         "partner_id": PARTNER_ID
     }
     
-    # แปลง body เป็น JSON string (ไม่มีช่องว่าง)
-    body_str = json.dumps(json_data, separators=(',', ':'))
+    # แปลง body เป็น JSON string (sorted keys และไม่มีช่องว่าง)
+    body_str = json.dumps(json_data, sort_keys=True, separators=(',', ':'))
     
-    # ✅ สร้าง signature ที่ถูกต้อง: partner_id + path + timestamp + body
+    # ✅ สร้าง signature ตาม Shopee API spec: partner_id + path + timestamp + body
     sign_base = f"{PARTNER_ID}{path}{timestamp}{body_str}"
     sign = hmac.new(PARTNER_KEY.encode(), sign_base.encode(), hashlib.sha256).hexdigest()
 
@@ -56,6 +57,13 @@ def get_access_token(code, shop_id):
         "timestamp": timestamp,
         "sign": sign
     }
+
+    # Debug information
+    st.write("🔍 **Debug Token Request:**")
+    st.write(f"- URL: {url}")
+    st.write(f"- Sign Base: `{sign_base}`")
+    st.write(f"- Sign: `{sign}`")
+    st.write(f"- Body: `{body_str}`")
 
     return requests.post(url, headers=headers, params=params, json=json_data)
 
@@ -105,6 +113,18 @@ def get_products(access_token, shop_id, page_size=20, offset=0):
 st.set_page_config(page_title="Shopee OAuth & Shop Data", page_icon="🛒")
 st.title("🛒 Shopee OAuth & Shop Management")
 
+# แสดงข้อมูลการตั้งค่า
+st.sidebar.header("⚙️ การตั้งค่า")
+st.sidebar.write(f"**Partner ID:** {PARTNER_ID}")
+st.sidebar.write(f"**Shop ID:** 142837 (จากรูป)")
+st.sidebar.write(f"**Redirect URL:** {REDIRECT_URL}")
+
+# ตรวจสอบว่าใส่ Partner Key หรือยัง
+if PARTNER_KEY == "YOUR_ACTUAL_PARTNER_KEY_HERE":
+    st.error("⚠️ **กรุณาใส่ Partner Key จริงในโค้ด!**")
+    st.write("ไปที่บรรทัดที่ 10 ในโค้ด และแทนที่ `YOUR_ACTUAL_PARTNER_KEY_HERE` ด้วย Partner Key จริงจาก Shopee Console")
+    st.stop()
+
 # ตรวจสอบ query parameters
 query_params = st.query_params
 code = query_params.get("code")
@@ -113,36 +133,47 @@ shop_id = query_params.get("shop_id")
 if code and shop_id:
     st.success(f"✅ ได้รับ authorization code และ shop_id: `{shop_id}`")
     
+    # ตรวจสอบว่า shop_id ตรงกับที่คาดหวังหรือไม่
+    if shop_id != "142837":
+        st.warning(f"⚠️ Shop ID ที่ได้รับ ({shop_id}) ไม่ตรงกับที่คาดหวัง (142837)")
+    
     # ดึง Access Token
     with st.spinner("🔄 กำลังดึง Access Token..."):
         try:
             res = get_access_token(code, shop_id)
-            res.raise_for_status()
-            token_data = res.json()
             
-            if "access_token" in token_data:
-                access_token = token_data["access_token"]
-                refresh_token = token_data.get("refresh_token", "")
+            st.write("📋 **Response Status:**", res.status_code)
+            st.write("📋 **Response Headers:**", dict(res.headers))
+            
+            if res.status_code == 200:
+                token_data = res.json()
                 
-                st.success("🎉 ได้รับ Access Token สำเร็จ!")
-                
-                # แสดงข้อมูล Token
-                with st.expander("📋 Token Information"):
+                if "access_token" in token_data:
+                    access_token = token_data["access_token"]
+                    refresh_token = token_data.get("refresh_token", "")
+                    
+                    st.success("🎉 ได้รับ Access Token สำเร็จ!")
+                    
+                    # แสดงข้อมูล Token
+                    with st.expander("📋 Token Information"):
+                        st.json(token_data)
+                    
+                    # เก็บ token ใน session state
+                    st.session_state.access_token = access_token
+                    st.session_state.shop_id = shop_id
+                    st.session_state.refresh_token = refresh_token
+                    
+                else:
+                    st.error("❌ ไม่พบ access_token ใน response")
                     st.json(token_data)
-                
-                # เก็บ token ใน session state
-                st.session_state.access_token = access_token
-                st.session_state.shop_id = shop_id
-                st.session_state.refresh_token = refresh_token
-                
             else:
-                st.error("❌ ไม่พบ access_token ใน response")
-                st.json(token_data)
-                
-        except requests.exceptions.HTTPError as http_err:
-            st.error(f"❌ HTTP Error: {http_err}")
-            if hasattr(http_err.response, 'text'):
-                st.code(http_err.response.text)
+                st.error(f"❌ HTTP Error {res.status_code}")
+                try:
+                    error_data = res.json()
+                    st.json(error_data)
+                except:
+                    st.text(res.text)
+                    
         except Exception as e:
             st.error(f"❌ เกิดข้อผิดพลาด: {e}")
 
@@ -158,14 +189,18 @@ if hasattr(st.session_state, 'access_token') and st.session_state.access_token:
             with st.spinner("🔄 กำลังดึงข้อมูลร้านค้า..."):
                 try:
                     shop_res = get_shop_info(st.session_state.access_token, st.session_state.shop_id)
-                    shop_res.raise_for_status()
-                    shop_data = shop_res.json()
                     
-                    if "error" not in shop_data:
-                        st.success("✅ ดึงข้อมูลร้านค้าสำเร็จ!")
-                        st.json(shop_data)
+                    if shop_res.status_code == 200:
+                        shop_data = shop_res.json()
+                        
+                        if "error" not in shop_data:
+                            st.success("✅ ดึงข้อมูลร้านค้าสำเร็จ!")
+                            st.json(shop_data)
+                        else:
+                            st.error(f"❌ API Error: {shop_data}")
                     else:
-                        st.error(f"❌ API Error: {shop_data}")
+                        st.error(f"❌ HTTP Error {shop_res.status_code}")
+                        st.text(shop_res.text)
                         
                 except Exception as e:
                     st.error(f"❌ เกิดข้อผิดพลาด: {e}")
@@ -175,33 +210,45 @@ if hasattr(st.session_state, 'access_token') and st.session_state.access_token:
             with st.spinner("🔄 กำลังดึงรายการสินค้า..."):
                 try:
                     products_res = get_products(st.session_state.access_token, st.session_state.shop_id)
-                    products_res.raise_for_status()
-                    products_data = products_res.json()
                     
-                    if "error" not in products_data:
-                        st.success("✅ ดึงรายการสินค้าสำเร็จ!")
+                    if products_res.status_code == 200:
+                        products_data = products_res.json()
                         
-                        if "response" in products_data and "item" in products_data["response"]:
-                            items = products_data["response"]["item"]
-                            st.write(f"📊 จำนวนสินค้าทั้งหมด: {len(items)} รายการ")
+                        if "error" not in products_data:
+                            st.success("✅ ดึงรายการสินค้าสำเร็จ!")
                             
-                            # แสดงรายการสินค้าในตาราง
-                            if items:
-                                import pandas as pd
-                                df = pd.DataFrame(items)
-                                st.dataframe(df, use_container_width=True)
+                            if "response" in products_data and "item" in products_data["response"]:
+                                items = products_data["response"]["item"]
+                                st.write(f"📊 จำนวนสินค้าทั้งหมด: {len(items)} รายการ")
+                                
+                                # แสดงรายการสินค้าในตาราง
+                                if items:
+                                    import pandas as pd
+                                    df = pd.DataFrame(items)
+                                    st.dataframe(df, use_container_width=True)
+                                else:
+                                    st.info("ไม่มีสินค้าในร้าน")
                             else:
-                                st.info("ไม่มีสินค้าในร้าน")
+                                st.json(products_data)
                         else:
-                            st.json(products_data)
+                            st.error(f"❌ API Error: {products_data}")
                     else:
-                        st.error(f"❌ API Error: {products_data}")
+                        st.error(f"❌ HTTP Error {products_res.status_code}")
+                        st.text(products_res.text)
                         
                 except Exception as e:
                     st.error(f"❌ เกิดข้อผิดพลาด: {e}")
 
 else:
     st.info("👇 กรุณาคลิกปุ่มเพื่อเริ่มต้นการ Login กับ Shopee")
+    
+    # แสดงข้อมูล Test Account
+    with st.expander("🧪 ข้อมูล Test Account (จากรูป)"):
+        st.write("**Shop ID:** 142837")
+        st.write("**Shop Account:** SANDBOX.f216878ec16b03a6f962")
+        st.write("**Shop Password:** 1bdd53e0ec3b7fb2")
+        st.write("**Shop Login URL:** https://seller.test-stable.shopee.co.th")
+    
     login_url = generate_login_url()
     
     st.markdown(f"""
@@ -217,13 +264,16 @@ else:
         ">🟢 คลิกเพื่อ Login Shopee</a>
     </div>
     """, unsafe_allow_html=True)
-    
-    st.info("💡 **หมายเหตุ:** หลังจาก Login สำเร็จ คุณจะสามารถดึงข้อมูลร้านค้าและรายการสินค้าได้")
 
 # แสดงข้อมูล Debug
 with st.expander("🔧 Debug Information"):
     st.write("**Current Query Parameters:**")
     st.json(dict(query_params))
+    
+    st.write("**Configuration:**")
+    st.write(f"- Partner ID: {PARTNER_ID}")
+    st.write(f"- Partner Key: {'*' * 20}...{PARTNER_KEY[-4:] if len(PARTNER_KEY) > 4 else 'NOT_SET'}")
+    st.write(f"- Redirect URL: {REDIRECT_URL}")
     
     if hasattr(st.session_state, 'access_token'):
         st.write("**Session State:**")
