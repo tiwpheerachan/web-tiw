@@ -9,7 +9,7 @@ import json
 # ===== ตั้งค่าแอป Shopee =====
 PARTNER_ID = 1280109
 # ⚠️ คุณต้องใส่ Partner Key จริงที่นี่
-PARTNER_KEY = "5a4e6e4c4d4375464c57506b7a42775a77466d686c534255574267514f494a54"  # แทนที่ด้วย key จริง
+PARTNER_KEY = "YOUR_ACTUAL_PARTNER_KEY_HERE"  # แทนที่ด้วย key จริง
 REDIRECT_URL = "https://web-tiw-f6am2usgmpzwel2adoj5qg.streamlit.app/"
 
 # ===== Function สร้างลิงก์ login Shopee =====
@@ -31,14 +31,13 @@ def generate_login_url():
     )
     return login_url
 
-# ===== Function ดึง Access Token (แก้ไขใหม่ทั้งหมด) =====
+# ===== Function ดึง Access Token =====
 def get_access_token(code, shop_id):
     url = "https://partner.test-stable.shopeemobile.com/api/v2/auth/token/get"
     timestamp = int(time.time())
     path = "/api/v2/auth/token/get"
     
-    # ✅ สำหรับ auth/token/get API ไม่ต้องใส่ body ใน signature
-    # Signature = partner_id + path + timestamp เท่านั้น
+    # สร้าง signature: partner_id + path + timestamp
     sign_base = f"{PARTNER_ID}{path}{timestamp}"
     sign = hmac.new(PARTNER_KEY.encode(), sign_base.encode(), hashlib.sha256).hexdigest()
 
@@ -57,47 +56,12 @@ def get_access_token(code, shop_id):
     }
 
     # Debug information
-    st.write("🔍 **Debug Token Request (แก้ไขแล้ว):**")
+    st.write("🔍 **Debug Token Request:**")
     st.write(f"- URL: {url}")
     st.write(f"- Sign Base: `{sign_base}`")
     st.write(f"- Sign: `{sign}`")
     st.write(f"- Body: `{json.dumps(json_data)}`")
     st.write(f"- Timestamp: {timestamp}")
-
-    return requests.post(url, headers=headers, params=params, json=json_data)
-
-# ===== Alternative Function สำหรับทดสอบ =====
-def get_access_token_alternative(code, shop_id):
-    """ทดสอบวิธีอื่นในการสร้าง signature"""
-    url = "https://partner.test-stable.shopeemobile.com/api/v2/auth/token/get"
-    timestamp = int(time.time())
-    path = "/api/v2/auth/token/get"
-    
-    # วิธีที่ 2: ลองใส่ body ใน signature (บางเอกสารบอกแบบนี้)
-    json_data = {
-        "code": code,
-        "shop_id": int(shop_id),
-        "partner_id": PARTNER_ID
-    }
-    
-    # สร้าง body string แบบ compact
-    body_str = json.dumps(json_data, separators=(',', ':'), sort_keys=True)
-    
-    # Signature = partner_id + path + timestamp + body
-    sign_base = f"{PARTNER_ID}{path}{timestamp}{body_str}"
-    sign = hmac.new(PARTNER_KEY.encode(), sign_base.encode(), hashlib.sha256).hexdigest()
-
-    headers = {"Content-Type": "application/json"}
-    params = {
-        "partner_id": PARTNER_ID,
-        "timestamp": timestamp,
-        "sign": sign
-    }
-
-    st.write("🔍 **Debug Alternative Method:**")
-    st.write(f"- Sign Base: `{sign_base}`")
-    st.write(f"- Sign: `{sign}`")
-    st.write(f"- Body String: `{body_str}`")
 
     return requests.post(url, headers=headers, params=params, json=json_data)
 
@@ -137,28 +101,34 @@ if PARTNER_KEY == "YOUR_ACTUAL_PARTNER_KEY_HERE":
     st.write("ไปที่บรรทัดที่ 10 ในโค้ด และแทนที่ `YOUR_ACTUAL_PARTNER_KEY_HERE` ด้วย Partner Key จริงจาก Shopee Console")
     st.stop()
 
-# ตรวจสอบ query parameters
+# ✅ ปรับปรุงการจัดการ query parameters
 query_params = st.query_params
+
+# ตรวจสอบ parameters ทั้งหมดที่ได้รับ
+st.write("🔍 **All Query Parameters:**")
+for key, value in query_params.items():
+    st.write(f"- {key}: {value}")
+
+# จัดการ parameters ที่เป็นไปได้
 code = query_params.get("code")
-shop_id = query_params.get("shop_id")
+shop_id = query_params.get("shop_id") 
+query_token = query_params.get("query_token")
+cookie_token = query_params.get("cookie_token")
+
+# แสดงสถานะ parameters
+if query_token is not None or cookie_token is not None:
+    st.warning("⚠️ พบ query_token หรือ cookie_token - อาจเป็น error จากการ redirect")
+    
+    if query_token == "" and cookie_token == "":
+        st.info("💡 **คำแนะนำ:** ลองคลิก 'Confirm Authorization' ในหน้า Shopee อีกครั้ง")
 
 if code and shop_id:
     st.success(f"✅ ได้รับ authorization code และ shop_id: `{shop_id}`")
     
-    # เลือกวิธีการทดสอบ
-    method = st.radio(
-        "เลือกวิธีการสร้าง Signature:",
-        ["วิธีที่ 1: ไม่ใส่ body ใน signature", "วิธีที่ 2: ใส่ body ใน signature"],
-        index=0
-    )
-    
-    if st.button("🔄 ทดสอบดึง Access Token"):
+    if st.button("🔄 ดึง Access Token"):
         with st.spinner("🔄 กำลังดึง Access Token..."):
             try:
-                if method == "วิธีที่ 1: ไม่ใส่ body ใน signature":
-                    res = get_access_token(code, shop_id)
-                else:
-                    res = get_access_token_alternative(code, shop_id)
+                res = get_access_token(code, shop_id)
                 
                 st.write("📋 **Response Status:**", res.status_code)
                 
@@ -191,12 +161,20 @@ if code and shop_id:
                         
                         # แสดงคำแนะนำเพิ่มเติม
                         if "error_sign" in str(error_data):
-                            st.info("💡 **คำแนะนำ:** ลองเปลี่ยนวิธีการสร้าง signature หรือตรวจสอบ Partner Key อีกครั้ง")
+                            st.info("💡 **คำแนะนำ:** ตรวจสอบ Partner Key อีกครั้ง")
                     except:
                         st.text(res.text)
                         
             except Exception as e:
                 st.error(f"❌ เกิดข้อผิดพลาด: {e}")
+
+elif code and not shop_id:
+    st.warning("⚠️ ได้รับ code แต่ไม่มี shop_id")
+    st.write(f"Code: {code}")
+    
+elif not code and shop_id:
+    st.warning("⚠️ ได้รับ shop_id แต่ไม่มี code")
+    st.write(f"Shop ID: {shop_id}")
 
 # แสดงข้อมูลร้านค้าถ้ามี access token
 if hasattr(st.session_state, 'access_token') and st.session_state.access_token:
@@ -233,6 +211,16 @@ else:
         st.write("**Shop Password:** 1bdd53e0ec3b7fb2")
         st.write("**Shop Login URL:** https://seller.test-stable.shopee.co.th")
     
+    # แสดงขั้นตอนการใช้งาน
+    with st.expander("📋 ขั้นตอนการใช้งาน"):
+        st.write("""
+        1. คลิกปุ่ม "คลิกเพื่อ Login Shopee" ด้านล่าง
+        2. ใช้ข้อมูล Test Account ด้านบนเพื่อ Login
+        3. คลิก "Confirm Authorization" ในหน้า Shopee
+        4. รอให้ระบบ redirect กลับมาที่หน้านี้
+        5. คลิก "ดึง Access Token" เพื่อขอ token
+        """)
+    
     login_url = generate_login_url()
     
     st.markdown(f"""
@@ -266,9 +254,13 @@ with st.expander("🔧 Debug Information"):
 
 # แสดงคำแนะนำเพิ่มเติม
 st.info("""
-💡 **คำแนะนำการแก้ปัญหา:**
-1. ตรวจสอบว่า Partner Key ถูกต้อง (คลิกไอคอน 👁️ ใน Shopee Console)
-2. ตรวจสอบว่า Redirect URL ตรงกันทุกตัวอักษร (รวม / ท้ายสุด)
-3. ลองทั้งสองวิธีการสร้าง signature
-4. ตรวจสอบว่าใช้ Test environment ที่ถูกต้อง
+💡 **สถานะปัจจุบัน:** คุณได้ไปถึงหน้า Authorization ของ Shopee แล้ว! 
+
+**ขั้นตอนต่อไป:**
+1. ใส่ Partner Key จริงในโค้ด (บรรทัดที่ 10)
+2. คลิก "Confirm Authorization" ในหน้า Shopee
+3. รอให้ระบบ redirect กลับมา
+4. คลิก "ดึง Access Token"
+
+**หากยังมี error:** ลองตรวจสอบ Partner Key และ Redirect URL อีกครั้ง
 """)
