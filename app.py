@@ -9,7 +9,7 @@ import json
 # ===== ตั้งค่าแอป Shopee (ใช้ข้อมูลจริงจากรูป) =====
 PARTNER_ID = 1280109
 # ⚠️ คุณต้องใส่ Partner Key จริงที่ไม่ได้ซ่อนด้วย * ที่นี่
-PARTNER_KEY = "YOUR_ACTUAL_PARTNER_KEY_HERE"  # แทนที่ด้วย key จริง
+PARTNER_KEY = "5a4e6e4c4d4375464c57506b7a42775a77466d686c534255574267514f494a54"  # แทนที่ด้วย key จริง
 REDIRECT_URL = "https://web-tiw-f6am2usgmpzwel2adoj5qg.streamlit.app/"
 
 # ===== Function สร้างลิงก์ login Shopee =====
