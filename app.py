@@ -71,19 +71,17 @@ def generate_auth_url():
     redirect_encoded = urllib.parse.quote(REDIRECT_URL, safe='')
     
     auth_url = (
-        f"https://partner.test-stable.shopeemobile.com{api_path}"
+        f"https://partner.test-stable.shopeemobile.com/api/v2/shop/auth_partner"
         f"?partner_id={PARTNER_ID}"
         f"&timestamp={timestamp}"
-        f"&sign={signature}"
-        f"&redirect={redirect_encoded}"
+        f"&sign={sign}"
+        f"&redirect={REDIRECT_URL}"
     )
     
-    return auth_url, {
-        "timestamp": timestamp,
-        "signature": signature,
-        "base_string": base_string,
-        "api_path": api_path
-    }
+    return templates.TemplateResponse("login.html", {
+            "request": request,
+            "login_url": login_url
+        })
 
 def get_access_token(code, shop_id):
     """ดึง Access Token จาก authorization code"""
