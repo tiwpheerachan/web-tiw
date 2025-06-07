@@ -146,6 +146,23 @@ def get_streamlit_ip():
     except:
         return []
 
+# เพิ่มหลังจาก get_streamlit_ip function
+def check_ip_whitelist_status():
+    """ตรวจสอบสถานะ IP Whitelist"""
+    current_ips = get_streamlit_ip()
+    if current_ips:
+        return {
+            "detected_ips": current_ips,
+            "status": "detected",
+            "message": "ตรวจพบ IP Address แล้ว - ต้องเพิ่มใน Shopee Console"
+        }
+    else:
+        return {
+            "detected_ips": [],
+            "status": "failed",
+            "message": "ไม่สามารถตรวจสอบ IP Address ได้"
+        }
+
 # ====== หน้าเว็บ ======
 st.set_page_config(page_title="Shopee OAuth Fixed", page_icon="🛒")
 st.title("🛒 Shopee OAuth & Shop Management (Fixed)")
@@ -155,37 +172,46 @@ st.sidebar.header("⚙️ การตั้งค่า")
 st.sidebar.write(f"**Partner ID:** {PARTNER_ID}")
 st.sidebar.write(f"**Redirect URL:** {REDIRECT_URL}")
 
-# ตรวจสอบ IP Address
-st.sidebar.subheader("🌐 IP Address Information")
-if st.sidebar.button("🔍 ตรวจสอบ IP Address"):
-    with st.spinner("กำลังตรวจสอบ IP Address..."):
-        current_ips = get_streamlit_ip()
-        if current_ips:
-            st.sidebar.success("✅ IP Address ที่ตรวจพบ:")
-            for ip in current_ips:
-                st.sidebar.code(ip)
-            st.sidebar.warning("⚠️ เพิ่ม IP เหล่านี้ใน Shopee Console!")
-        else:
-            st.sidebar.error("❌ ไม่สามารถตรวจสอบ IP ได้")
+# แทนที่ส่วน IP Address Information ใน sidebar
+st.sidebar.subheader("🌐 IP Address Status")
 
-# แสดงคำแนะนำสำหรับ IP Whitelist
-with st.expander("📋 วิธีแก้ไข IP Address Whitelist"):
-    st.write("""
-    **ปัญหา:** คุณใช้ IP Address ปลอม (104.16.0.1, 104.16.3.2, 104.16.8.8) ใน Shopee Console
+# ตรวจสอบ IP อัตโนมัติ
+ip_status = check_ip_whitelist_status()
+
+if ip_status["status"] == "detected":
+    st.sidebar.success("✅ ตรวจพบ IP Address:")
+    for ip in ip_status["detected_ips"]:
+        st.sidebar.code(ip, language="text")
     
-    **วิธีแก้ไข:**
-    1. คลิกปุ่ม "🔍 ตรวจสอบ IP Address" ในเมนูด้านซ้าย
-    2. คัดลอก IP Address ที่แสดงขึ้นมา
-    3. ไปที่ Shopee Open Platform Console
-    4. เข้าไปที่ App Management > [ชื่อแอปของคุณ]
-    5. ในส่วน "IP Address Whitelist" ให้:
-       - ลบ IP ปลอมทั้งหมด (104.16.0.1, 104.16.3.2, 104.16.8.8)
-       - เพิ่ม IP Address จริงที่ได้จากการตรวจสอบ
-    6. บันทึกการเปลี่ยนแปลง
+    st.sidebar.error("❌ ยังไม่ได้เพิ่มใน Shopee Console!")
     
-    **หมายเหตุ:** Streamlit Cloud อาจมี IP Address ที่เปลี่ยนแปลงได้ 
-    หากยังมีปัญหา ให้ลองเพิ่ม 0.0.0.0/0 (อนุญาตทุก IP) สำหรับการทดสอบ
-    """)
+    if st.sidebar.button("🔄 ตรวจสอบ IP ใหม่"):
+        st.rerun()
+        
+else:
+    st.sidebar.warning("⚠️ ไม่สามารถตรวจสอบ IP ได้")
+    if st.sidebar.button("🔍 ลองตรวจสอบอีกครั้ง"):
+        st.rerun()
+
+# แสดงคำแนะนำสำหรับ IP Whitelist (ปรับปรุงใหม่)
+st.error("""
+🚨 **ขั้นตอนแก้ไข IP Address Whitelist (จำเป็น!)**
+
+**IP Address ที่ตรวจพบ:** `34.83.176.217`
+
+**ทำตามขั้นตอนนี้:**
+1. 🌐 เปิด [Shopee Open Platform Console](https://open.shopee.com)
+2. 🔑 Login เข้าสู่ระบบ
+3. 📱 ไปที่ **App Management** > เลือกแอป **test tiw**
+4. 📋 หาส่วน **"IP Address Whitelist"**
+5. ❌ **ลบ IP ปลอมทั้งหมด:** 104.16.0.1, 104.16.3.2, 104.16.8.8
+6. ➕ **เพิ่ม IP จริง:** `34.83.176.217`
+7. 💾 **บันทึกการเปลี่ยนแปลง**
+8. ⏱️ **รอ 1-2 นาที** ให้ระบบอัปเดต
+9. 🔄 **ลองใช้งานใหม่**
+
+**หมายเหตุ:** หากยังไม่ได้ผล ให้ลองเพิ่ม `0.0.0.0/0` (อนุญาตทุก IP) สำหรับการทดสอบ
+""")
 
 # ตรวจสอบ query parameters
 query_params = st.query_params
@@ -262,6 +288,27 @@ if code and shop_id:
                             
                 except Exception as e:
                     st.error(f"❌ เกิดข้อผิดพลาด: {e}")
+        # เพิ่มหลังจากปุ่ม "ดึง Access Token"
+        if st.button("🧪 ทดสอบหลังแก้ไข IP", use_container_width=True):
+            st.info("🔄 กำลังทดสอบการเชื่อมต่อ...")
+            
+            # ทดสอบด้วยการเรียก API ง่ายๆ
+            try:
+                test_response = get_access_token(code, shop_id)
+                
+                if test_response.status_code == 200:
+                    st.success("🎉 IP Whitelist แก้ไขสำเร็จ! สามารถใช้งานได้แล้ว")
+                elif test_response.status_code == 403:
+                    error_data = test_response.json()
+                    if "error_sign" in str(error_data):
+                        st.error("❌ ยังคงมีปัญหา IP Whitelist - ลองรอสักครู่แล้วทดสอบใหม่")
+                    else:
+                        st.warning("⚠️ มีปัญหาอื่นๆ - ตรวจสอบ Debug Information")
+                else:
+                    st.warning(f"⚠️ HTTP Status: {test_response.status_code}")
+                    
+            except Exception as e:
+                st.error(f"❌ เกิดข้อผิดพลาดในการทดสอบ: {e}")
     
     with col2:
         if st.button("🔄 เริ่มใหม่", use_container_width=True):
