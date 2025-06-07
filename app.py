@@ -5,32 +5,28 @@ import hashlib
 import hmac
 import urllib.parse
 import json
-import base64
-import re
 
 # ===== ตั้งค่าแอป Shopee =====
 PARTNER_ID = 1280109
 PARTNER_KEY = "5a4e6e4c4d4375464c57506b7a42775a77466d686c534255574267514f494a54"
-# ⚠️ ตรวจสอบ Redirect URL ให้ตรงกับที่ตั้งค่าใน Shopee Console (รวมถึง / ท้ายสุด)
 REDIRECT_URL = "https://web-tiw-f6am2usgmpzwel2adoj5qg.streamlit.app/"
 
-# ===== Function สร้างลิงก์ login Shopee (ปรับปรุงใหม่) =====
+# ===== Function สร้างลิงก์ login Shopee (แก้ไขแล้ว) =====
 def generate_login_url():
     timestamp = int(time.time())
     path = "/api/v2/shop/auth_partner"
     base_url = f"https://partner.test-stable.shopeemobile.com{path}"
 
-    # สร้าง sign ด้วย partner_id + path + timestamp
+    # สร้าง sign ด้วย partner_id + path + timestamp (ไม่ใส่ leading zeros)
     sign_base = f"{PARTNER_ID}{path}{timestamp}"
-    sign = hmac.new(bytes.fromhex(PARTNER_KEY), sign_base.encode(), hashlib.sha256).hexdigest()
+    
+    # แปลง PARTNER_KEY จาก hex string เป็น bytes แล้วสร้าง HMAC
+    partner_key_bytes = bytes.fromhex(PARTNER_KEY)
+    sign = hmac.new(partner_key_bytes, sign_base.encode('utf-8'), hashlib.sha256).hexdigest()
 
-    # ตรวจสอบว่า REDIRECT_URL ลงท้ายด้วย / หรือไม่
-    if not REDIRECT_URL.endswith('/'):
-        redirect_url = f"{REDIRECT_URL}/"
-    else:
-        redirect_url = REDIRECT_URL
-        
-    redirect_encoded = urllib.parse.quote(redirect_url, safe="")
+    # URL encode redirect URL
+    redirect_encoded = urllib.parse.quote(REDIRECT_URL, safe='')
+    
     login_url = (
         f"{base_url}?partner_id={PARTNER_ID}"
         f"&timestamp={timestamp}"
@@ -39,102 +35,71 @@ def generate_login_url():
     )
     
     # Debug information
-    st.session_state.last_login_url = login_url
-    st.session_state.last_sign_base = sign_base
-    st.session_state.last_sign = sign
-    st.session_state.last_timestamp = timestamp
+    st.session_state.debug_login = {
+        "timestamp": timestamp,
+        "sign_base": sign_base,
+        "sign": sign,
+        "partner_key_length": len(PARTNER_KEY),
+        "login_url": login_url
+    }
     
     return login_url
 
-# ===== Function ดึง Access Token (ปรับปรุงใหม่) =====
+# ===== Function ดึง Access Token (แก้ไขแล้ว) =====
 def get_access_token(code, shop_id):
-    url = "https://partner.test-stable.shopeemobile.com/api/v2/auth/token/get"
     timestamp = int(time.time())
     path = "/api/v2/auth/token/get"
+    url = f"https://partner.test-stable.shopeemobile.com{path}"
     
-    # ✅ ทดลองวิธีที่ 1: partner_id + path + timestamp
-    sign_base = f"{PARTNER_ID}{path}{timestamp}"
-    sign = hmac.new(bytes.fromhex(PARTNER_KEY), sign_base.encode(), hashlib.sha256).hexdigest()
+    # Request body
+    body = {
+        "code": code,
+        "shop_id": int(shop_id),
+        "partner_id": PARTNER_ID
+    }
+    
+    # สร้าง signature: partner_id + path + timestamp + request_body
+    body_json = json.dumps(body, separators=(',', ':'), sort_keys=True)
+    sign_base = f"{PARTNER_ID}{path}{timestamp}{body_json}"
+    
+    partner_key_bytes = bytes.fromhex(PARTNER_KEY)
+    sign = hmac.new(partner_key_bytes, sign_base.encode('utf-8'), hashlib.sha256).hexdigest()
 
-    headers = {"Content-Type": "application/json"}
+    # Parameters
     params = {
         "partner_id": PARTNER_ID,
         "timestamp": timestamp,
         "sign": sign
     }
     
-    # Request body
-    json_data = {
-        "code": code,
-        "shop_id": int(shop_id),
-        "partner_id": PARTNER_ID
+    headers = {
+        "Content-Type": "application/json"
     }
-
+    
     # Debug information
-    debug_info = {
+    st.session_state.debug_token = {
         "url": url,
-        "method": "POST",
-        "headers": headers,
-        "params": params,
-        "json_data": json_data,
+        "timestamp": timestamp,
         "sign_base": sign_base,
         "sign": sign,
-        "timestamp": timestamp
-    }
-    st.session_state.last_token_request = debug_info
-    
-    return requests.post(url, headers=headers, params=params, json=json_data)
-
-# ===== Function ดึง Access Token แบบที่ 2 =====
-def get_access_token_alt(code, shop_id):
-    url = "https://partner.test-stable.shopeemobile.com/api/v2/auth/token/get"
-    timestamp = int(time.time())
-    path = "/api/v2/auth/token/get"
-    
-    # Request body
-    json_data = {
-        "code": code,
-        "shop_id": int(shop_id),
-        "partner_id": PARTNER_ID
+        "body": body,
+        "body_json": body_json,
+        "params": params
     }
     
-    # ✅ ทดลองวิธีที่ 2: partner_id + path + timestamp + body
-    body_str = json.dumps(json_data, separators=(',', ':'), sort_keys=True)
-    sign_base = f"{PARTNER_ID}{path}{timestamp}{body_str}"
-    sign = hmac.new(bytes.fromhex(PARTNER_KEY), sign_base.encode(), hashlib.sha256).hexdigest()
+    return requests.post(url, params=params, json=body, headers=headers)
 
-    headers = {"Content-Type": "application/json"}
-    params = {
-        "partner_id": PARTNER_ID,
-        "timestamp": timestamp,
-        "sign": sign
-    }
-
-    # Debug information
-    debug_info = {
-        "url": url,
-        "method": "POST",
-        "headers": headers,
-        "params": params,
-        "json_data": json_data,
-        "sign_base": sign_base,
-        "sign": sign,
-        "timestamp": timestamp,
-        "body_str": body_str
-    }
-    st.session_state.last_token_request_alt = debug_info
-    
-    return requests.post(url, headers=headers, params=params, json=json_data)
-
-# ===== Function ดึงข้อมูลร้านค้า =====
+# ===== Function ดึงข้อมูลร้านค้า (แก้ไขแล้ว) =====
 def get_shop_info(access_token, shop_id):
-    url = "https://partner.test-stable.shopeemobile.com/api/v2/shop/get_shop_info"
     timestamp = int(time.time())
     path = "/api/v2/shop/get_shop_info"
+    url = f"https://partner.test-stable.shopeemobile.com{path}"
     
     # สร้าง signature: partner_id + path + timestamp + access_token + shop_id
     sign_base = f"{PARTNER_ID}{path}{timestamp}{access_token}{shop_id}"
-    sign = hmac.new(bytes.fromhex(PARTNER_KEY), sign_base.encode(), hashlib.sha256).hexdigest()
+    
+    partner_key_bytes = bytes.fromhex(PARTNER_KEY)
+    sign = hmac.new(partner_key_bytes, sign_base.encode('utf-8'), hashlib.sha256).hexdigest()
 
     params = {
         "partner_id": PARTNER_ID,
@@ -143,152 +108,197 @@ def get_shop_info(access_token, shop_id):
         "shop_id": shop_id,
         "sign": sign
     }
+    
+    # Debug information
+    st.session_state.debug_shop = {
+        "timestamp": timestamp,
+        "sign_base": sign_base,
+        "sign": sign,
+        "params": params
+    }
 
     return requests.get(url, params=params)
 
-# ===== Function ตรวจสอบ Partner Key =====
-def validate_partner_key(key):
-    # ตรวจสอบว่าเป็น hex string หรือไม่
+# ===== Function หา IP Address ของ Streamlit =====
+def get_streamlit_ip():
     try:
-        # ลองแปลงเป็น bytes
-        bytes.fromhex(key)
-        return True
-    except ValueError:
-        return False
-
-# ===== Function สร้าง direct URL ที่มี code และ shop_id =====
-def create_direct_url(code, shop_id):
-    base_url = REDIRECT_URL
-    if base_url.endswith('/'):
-        base_url = base_url[:-1]
-    
-    return f"{base_url}?code={code}&shop_id={shop_id}"
+        # ใช้ service หลายตัวเพื่อหา IP
+        services = [
+            "https://api.ipify.org?format=json",
+            "https://httpbin.org/ip",
+            "https://api.myip.com"
+        ]
+        
+        ips = []
+        for service in services:
+            try:
+                response = requests.get(service, timeout=5)
+                if response.status_code == 200:
+                    data = response.json()
+                    if 'ip' in data:
+                        ips.append(data['ip'])
+                    elif 'origin' in data:
+                        ips.append(data['origin'])
+            except:
+                continue
+        
+        return list(set(ips))  # Remove duplicates
+    except:
+        return []
 
 # ====== หน้าเว็บ ======
-st.set_page_config(page_title="Shopee OAuth & Shop Data", page_icon="🛒")
-st.title("🛒 Shopee OAuth & Shop Management")
+st.set_page_config(page_title="Shopee OAuth Fixed", page_icon="🛒")
+st.title("🛒 Shopee OAuth & Shop Management (Fixed)")
 
 # แสดงข้อมูลการตั้งค่า
 st.sidebar.header("⚙️ การตั้งค่า")
 st.sidebar.write(f"**Partner ID:** {PARTNER_ID}")
-st.sidebar.write(f"**Shop ID:** 142837")
 st.sidebar.write(f"**Redirect URL:** {REDIRECT_URL}")
 
-# ตรวจสอบ Partner Key
-if not validate_partner_key(PARTNER_KEY):
-    st.error("⚠️ **Partner Key ไม่ถูกต้อง!**")
-    st.write("Partner Key ต้องเป็น hex string (0-9, a-f)")
-    st.stop()
+# ตรวจสอบ IP Address
+st.sidebar.subheader("🌐 IP Address Information")
+if st.sidebar.button("🔍 ตรวจสอบ IP Address"):
+    with st.spinner("กำลังตรวจสอบ IP Address..."):
+        current_ips = get_streamlit_ip()
+        if current_ips:
+            st.sidebar.success("✅ IP Address ที่ตรวจพบ:")
+            for ip in current_ips:
+                st.sidebar.code(ip)
+            st.sidebar.warning("⚠️ เพิ่ม IP เหล่านี้ใน Shopee Console!")
+        else:
+            st.sidebar.error("❌ ไม่สามารถตรวจสอบ IP ได้")
 
-# ✅ ปรับปรุงการจัดการ query parameters
+# แสดงคำแนะนำสำหรับ IP Whitelist
+with st.expander("📋 วิธีแก้ไข IP Address Whitelist"):
+    st.write("""
+    **ปัญหา:** คุณใช้ IP Address ปลอม (104.16.0.1, 104.16.3.2, 104.16.8.8) ใน Shopee Console
+    
+    **วิธีแก้ไข:**
+    1. คลิกปุ่ม "🔍 ตรวจสอบ IP Address" ในเมนูด้านซ้าย
+    2. คัดลอก IP Address ที่แสดงขึ้นมา
+    3. ไปที่ Shopee Open Platform Console
+    4. เข้าไปที่ App Management > [ชื่อแอปของคุณ]
+    5. ในส่วน "IP Address Whitelist" ให้:
+       - ลบ IP ปลอมทั้งหมด (104.16.0.1, 104.16.3.2, 104.16.8.8)
+       - เพิ่ม IP Address จริงที่ได้จากการตรวจสอบ
+    6. บันทึกการเปลี่ยนแปลง
+    
+    **หมายเหตุ:** Streamlit Cloud อาจมี IP Address ที่เปลี่ยนแปลงได้ 
+    หากยังมีปัญหา ให้ลองเพิ่ม 0.0.0.0/0 (อนุญาตทุก IP) สำหรับการทดสอบ
+    """)
+
+# ตรวจสอบ query parameters
 query_params = st.query_params
+code = query_params.get("code")
+shop_id = query_params.get("shop_id", "142837")
 
-# ✅ ตรวจสอบ manual input
-manual_input = st.sidebar.checkbox("ใส่ code และ shop_id เอง")
+# Manual input option
+with st.sidebar:
+    st.subheader("🔧 Manual Input")
+    manual_code = st.text_input("Authorization Code", value=code or "")
+    manual_shop_id = st.text_input("Shop ID", value=shop_id)
+    
+    if st.button("ใช้ค่าที่ใส่เอง"):
+        if manual_code and manual_shop_id:
+            # Update query params
+            st.query_params.code = manual_code
+            st.query_params.shop_id = manual_shop_id
+            st.rerun()
 
-if manual_input:
-    with st.sidebar:
-        manual_code = st.text_input("Authorization Code")
-        manual_shop_id = st.text_input("Shop ID", "142837")
-        
-        if st.button("ใช้ค่าที่ใส่เอง"):
-            # สร้าง URL ที่มี code และ shop_id
-            direct_url = create_direct_url(manual_code, manual_shop_id)
-            st.success(f"สร้าง URL สำเร็จ: {direct_url}")
-            st.markdown(f"[คลิกเพื่อใช้ค่าที่ใส่เอง]({direct_url})")
-
-# ลบ parameters ที่ไม่ต้องการ (empty values)
-filtered_params = {}
-for key, value in query_params.items():
-    if value and value.strip():  # เฉพาะ values ที่ไม่ว่าง
-        filtered_params[key] = value
-
-# ตรวจสอบ parameters ที่สำคัญ
-code = filtered_params.get("code")
-shop_id = filtered_params.get("shop_id")
-
-# ✅ ตรวจสอบว่ามี code และ shop_id หรือไม่
+# Main content
 if code and shop_id:
     st.success(f"✅ ได้รับ authorization code และ shop_id: `{shop_id}`")
     
-    # แสดงปุ่มดึง Access Token
-    method = st.radio(
-        "เลือกวิธีการสร้าง Signature:",
-        ["วิธีที่ 1: partner_id + path + timestamp", 
-         "วิธีที่ 2: partner_id + path + timestamp + body"],
-        index=0
-    )
-    
-    col1, col2 = st.columns([1, 1])
+    col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("🔄 ดึง Access Token", use_container_width=True, type="primary"):
-            with st.spinner("🔄 กำลังดึง Access Token..."):
+        if st.button("🔄 ดึง Access Token", type="primary", use_container_width=True):
+            with st.spinner("กำลังดึง Access Token..."):
                 try:
-                    if method == "วิธีที่ 1: partner_id + path + timestamp":
-                        res = get_access_token(code, shop_id)
-                        debug_key = "last_token_request"
-                    else:
-                        res = get_access_token_alt(code, shop_id)
-                        debug_key = "last_token_request_alt"
+                    response = get_access_token(code, shop_id)
                     
-                    st.write("📋 **Response Status:**", res.status_code)
+                    st.write(f"**Response Status:** {response.status_code}")
                     
-                    # แสดง request details
-                    with st.expander("📋 Request Details"):
-                        st.json(st.session_state.get(debug_key, {}))
-                    
-                    if res.status_code == 200:
-                        token_data = res.json()
+                    if response.status_code == 200:
+                        token_data = response.json()
                         
                         if "access_token" in token_data:
-                            access_token = token_data["access_token"]
-                            refresh_token = token_data.get("refresh_token", "")
-                            
                             st.success("🎉 ได้รับ Access Token สำเร็จ!")
                             
-                            # แสดงข้อมูล Token
+                            # เก็บข้อมูลใน session state
+                            st.session_state.access_token = token_data["access_token"]
+                            st.session_state.refresh_token = token_data.get("refresh_token", "")
+                            st.session_state.shop_id = shop_id
+                            
+                            # แสดงข้อมูล token
                             with st.expander("📋 Token Information"):
                                 st.json(token_data)
                             
-                            # เก็บ token ใน session state
-                            st.session_state.access_token = access_token
-                            st.session_state.shop_id = shop_id
-                            st.session_state.refresh_token = refresh_token
-                            
-                            # Auto-refresh หน้าเพื่อแสดงส่วนข้อมูลร้านค้า
                             st.rerun()
-                            
                         else:
                             st.error("❌ ไม่พบ access_token ใน response")
                             st.json(token_data)
                     else:
-                        st.error(f"❌ HTTP Error {res.status_code}")
+                        st.error(f"❌ HTTP Error {response.status_code}")
                         try:
-                            error_data = res.json()
+                            error_data = response.json()
                             st.json(error_data)
                             
-                            # แสดงคำแนะนำเพิ่มเติม
+                            # แสดงคำแนะนำเฉพาะ
                             if "error_sign" in str(error_data):
-                                st.info("""
-                                💡 **คำแนะนำสำหรับ Wrong sign:**
-                                1. ตรวจสอบว่า Partner Key ถูกต้อง
-                                2. ลองใช้วิธีการสร้าง signature แบบอื่น
-                                3. ตรวจสอบว่า timestamp ที่ใช้เป็นเวลาปัจจุบัน
+                                st.error("""
+                                🚨 **Wrong Sign Error**
+                                
+                                สาเหตุที่เป็นไปได้:
+                                1. **IP Address ไม่ได้อยู่ใน Whitelist** (สาเหตุหลัก)
+                                2. Partner Key ไม่ถูกต้อง
+                                3. Timestamp ไม่ถูกต้อง
+                                4. การสร้าง signature ผิดพลาด
+                                
+                                **แก้ไข:** ตรวจสอบ IP Address Whitelist ใน Shopee Console
                                 """)
                         except:
-                            st.text(res.text)
+                            st.text(response.text)
                             
                 except Exception as e:
                     st.error(f"❌ เกิดข้อผิดพลาด: {e}")
     
     with col2:
-        if st.button("🔄 ล้างข้อมูลและเริ่มใหม่", use_container_width=True):
-            # ล้าง session state และ query params
+        if st.button("🔄 เริ่มใหม่", use_container_width=True):
+            # Clear session state
             for key in list(st.session_state.keys()):
-                del st.session_state[key]
-            # Redirect ไปยังหน้าเดิมโดยไม่มี query params
+                if key.startswith(('access_token', 'refresh_token', 'shop_id', 'debug_')):
+                    del st.session_state[key]
+            
+            # Clear query params
+            st.query_params.clear()
             st.rerun()
+
+else:
+    # แสดงปุ่ม Login
+    st.info("👆 คลิกปุ่มด้านล่างเพื่อเริ่มกระบวนการ OAuth")
+    
+    login_url = generate_login_url()
+    
+    st.markdown(f"""
+    <div style="text-align: center; margin: 30px 0;">
+        <a href="{login_url}" target="_self" style="
+            background: linear-gradient(45deg, #ee4d2d, #ff6b35);
+            color: white;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: bold;
+            font-size: 18px;
+            display: inline-block;
+            box-shadow: 0 4px 15px rgba(238, 77, 45, 0.3);
+            transition: transform 0.2s;
+        " onmouseover="this.style.transform='translateY(-2px)'" 
+           onmouseout="this.style.transform='translateY(0)'">
+            🚀 เริ่ม Shopee OAuth
+        </a>
+    </div>
+    """, unsafe_allow_html=True)
 
 # แสดงข้อมูลร้านค้าถ้ามี access token
 if hasattr(st.session_state, 'access_token') and st.session_state.access_token:
@@ -299,12 +309,15 @@ if hasattr(st.session_state, 'access_token') and st.session_state.access_token:
     
     with col1:
         if st.button("📊 ดึงข้อมูลร้านค้า", use_container_width=True):
-            with st.spinner("🔄 กำลังดึงข้อมูลร้านค้า..."):
+            with st.spinner("กำลังดึงข้อมูลร้านค้า..."):
                 try:
-                    shop_res = get_shop_info(st.session_state.access_token, st.session_state.shop_id)
+                    shop_response = get_shop_info(
+                        st.session_state.access_token, 
+                        st.session_state.shop_id
+                    )
                     
-                    if shop_res.status_code == 200:
-                        shop_data = shop_res.json()
+                    if shop_response.status_code == 200:
+                        shop_data = shop_response.json()
                         
                         if "error" not in shop_data:
                             st.success("✅ ดึงข้อมูลร้านค้าสำเร็จ!")
@@ -312,124 +325,73 @@ if hasattr(st.session_state, 'access_token') and st.session_state.access_token:
                         else:
                             st.error(f"❌ API Error: {shop_data}")
                     else:
-                        st.error(f"❌ HTTP Error {shop_res.status_code}")
-                        st.text(shop_res.text)
+                        st.error(f"❌ HTTP Error {shop_response.status_code}")
+                        st.text(shop_response.text)
                         
                 except Exception as e:
                     st.error(f"❌ เกิดข้อผิดพลาด: {e}")
     
     with col2:
-        if st.button("🔄 ล้าง Token", use_container_width=True):
-            # ล้าง token จาก session state
-            if hasattr(st.session_state, 'access_token'):
-                del st.session_state.access_token
-            if hasattr(st.session_state, 'shop_id'):
-                del st.session_state.shop_id
-            if hasattr(st.session_state, 'refresh_token'):
-                del st.session_state.refresh_token
+        if st.button("🗑️ ลบ Token", use_container_width=True):
+            # Clear tokens
+            for key in ['access_token', 'refresh_token', 'shop_id']:
+                if hasattr(st.session_state, key):
+                    delattr(st.session_state, key)
             st.rerun()
 
-else:
-    # ✅ เพิ่มวิธีการแก้ปัญหา query_token, cookie_token
-    st.warning("""
-    ⚠️ **ปัญหาที่พบ:** Shopee มักส่ง `query_token=, cookie_token=` กลับมาแทนที่จะส่ง code และ shop_id
-    
-    **วิธีแก้ไข:**
-    1. ลองใช้ "ใส่ code และ shop_id เอง" ในเมนูด้านซ้าย
-    2. หรือลองวิธีการ workaround ด้านล่าง
-    """)
-    
-    # แสดงวิธีการ workaround
-    with st.expander("🔧 วิธีการ Workaround"):
-        st.write("""
-        1. คลิกปุ่ม "คลิกเพื่อ Login Shopee" ด้านล่าง
-        2. เมื่อถึงหน้า Authorization ของ Shopee ให้เลือก "30 Days" และคลิก "Confirm Authorization"
-        3. หากเกิด error `query_token=, cookie_token=` ให้ดูที่ URL ในเบราว์เซอร์
-        4. URL จะมีลักษณะคล้าย: `https://web-tiw-f6am2usgmpzwel2adoj5qg.streamlit.app/?query_token=&cookie_token=`
-        5. แก้ไข URL เป็น: `https://web-tiw-f6am2usgmpzwel2adoj5qg.streamlit.app/?code=YOUR_CODE&shop_id=142837`
-        6. แทนที่ YOUR_CODE ด้วย code ที่ได้จาก Shopee (ดูได้จาก Network tab ใน Developer Tools)
-        7. กด Enter เพื่อไปยัง URL ที่แก้ไขแล้ว
-        """)
-    
-    # แสดงข้อมูล Test Account
-    with st.expander("🧪 ข้อมูล Test Account"):
-        st.write("**Shop ID:** 142837")
-        st.write("**Shop Account:** SANDBOX.f216878ec16b03a6f962")
-        st.write("**Shop Password:** 1bdd53e0ec3b7fb2")
-        st.write("**Shop Login URL:** https://seller.test-stable.shopee.co.th")
-    
-    # แสดงขั้นตอนการใช้งาน
-    with st.expander("📋 ขั้นตอนการใช้งาน"):
-        st.write("""
-        1. ✅ คลิกปุ่ม "คลิกเพื่อ Login Shopee" ด้านล่าง
-        2. ✅ ใช้ข้อมูล Test Account ด้านบนเพื่อ Login
-        3. ✅ เลือก "30 Days" ใน Authorization Period
-        4. ✅ คลิก "Confirm Authorization" ในหน้า Shopee
-        5. 🔄 หากเกิด error ให้ใช้วิธีการ Workaround ด้านบน
-        6. 🎯 คลิก "ดึง Access Token" เพื่อขอ token
-        """)
-    
-    login_url = generate_login_url()
-    
-    st.markdown(f"""
-    <div style="text-align: center; margin: 20px 0;">
-        <a href="{login_url}" target="_self" style="
-            background-color: #ee4d2d;
-            color: white;
-            padding: 12px 24px;
-            text-decoration: none;
-            border-radius: 8px;
-            font-weight: bold;
-            display: inline-block;
-        ">🟢 คลิกเพื่อ Login Shopee</a>
-    </div>
-    """, unsafe_allow_html=True)
-
-# แสดงข้อมูล Debug
+# Debug Information
 with st.expander("🔧 Debug Information"):
-    st.write("**All Query Parameters (Raw):**")
-    st.json(dict(query_params))
+    st.subheader("Configuration")
+    st.json({
+        "partner_id": PARTNER_ID,
+        "partner_key_preview": f"{PARTNER_KEY[:10]}...{PARTNER_KEY[-10:]}",
+        "redirect_url": REDIRECT_URL,
+        "query_params": dict(query_params)
+    })
     
-    st.write("**Filtered Parameters:**")
-    st.json(filtered_params)
+    # แสดง debug info ต่างๆ
+    debug_sections = [
+        ("Login Debug", "debug_login"),
+        ("Token Debug", "debug_token"),
+        ("Shop Debug", "debug_shop")
+    ]
     
-    st.write("**Configuration:**")
-    st.write(f"- Partner ID: {PARTNER_ID}")
-    st.write(f"- Partner Key: {PARTNER_KEY[:5]}...{PARTNER_KEY[-5:]}")
-    st.write(f"- Redirect URL: {REDIRECT_URL}")
-    
-    if hasattr(st.session_state, 'last_login_url'):
-        st.write("**Last Login URL:**")
-        st.write(st.session_state.last_login_url)
-        st.write(f"- Sign Base: {st.session_state.last_sign_base}")
-        st.write(f"- Sign: {st.session_state.last_sign}")
-        st.write(f"- Timestamp: {st.session_state.last_timestamp}")
-    
-    if hasattr(st.session_state, 'access_token'):
-        st.write("**Session State:**")
-        st.write(f"- Access Token: {st.session_state.access_token[:20]}...")
-        st.write(f"- Shop ID: {st.session_state.shop_id}")
+    for title, key in debug_sections:
+        if hasattr(st.session_state, key):
+            st.subheader(title)
+            st.json(getattr(st.session_state, key))
 
-# ✅ เพิ่มวิธีการแก้ปัญหาแบบละเอียด
+# Test Account Information
+with st.expander("🧪 Test Account Information"):
+    st.code("""
+    Shop ID: 142837
+    Shop Account: SANDBOX.f216878ec16b03a6f962
+    Shop Password: 1bdd53e0ec3b7fb2
+    Shop Login URL: https://seller.test-stable.shopee.co.th
+    """)
+
+# แสดงขั้นตอนการแก้ปัญหา
 st.info("""
-## 🔍 วิธีการแก้ปัญหา query_token, cookie_token
+## 🔧 ขั้นตอนการแก้ปัญหา
 
-### วิธีที่ 1: ใช้ Developer Tools ในเบราว์เซอร์
-1. กด F12 หรือคลิกขวา > Inspect เพื่อเปิด Developer Tools
-2. ไปที่แท็บ Network
-3. คลิกปุ่ม "คลิกเพื่อ Login Shopee" และทำตามขั้นตอนจนถึงหน้า Confirm Authorization
-4. คลิก "Confirm Authorization"
-5. ในแท็บ Network จะมี request ที่มี code และ shop_id
-6. คัดลอก code และใส่ในช่อง "Authorization Code" ในเมนูด้านซ้าย
+### 1. แก้ไข IP Address Whitelist (สำคัญที่สุด!)
+- ตรวจสอบ IP Address จริงด้วยปุ่มในเมนูด้านซ้าย
+- เข้าไปแก้ไขใน Shopee Console
+- ลบ IP ปลอมทั้งหมด แล้วใส่ IP จริง
 
-### วิธีที่ 2: ใช้ Postman หรือ API Client อื่นๆ
-1. สร้าง request ไปยัง Shopee API โดยตรง
-2. ใช้ Partner ID และ Partner Key ที่ถูกต้อง
-3. สร้าง signature ตามที่ Shopee กำหนด
-4. ทดสอบ API เพื่อดูว่าทำงานได้หรือไม่
+### 2. ตรวจสอบการตั้งค่า
+- Partner ID: 1280109 ✅
+- Partner Key: ถูกต้อง ✅  
+- Redirect URL: ตรงกับใน Console ✅
 
-### วิธีที่ 3: ตรวจสอบ Redirect URL
-1. ตรวจสอบว่า Redirect URL ใน Shopee Console ตรงกับที่ใช้ในโค้ด
-2. ตรวจสอบว่ามี / ท้ายสุดหรือไม่ (ต้องตรงกัน)
-3. ลองใช้ URL ที่ไม่มี query parameters
+### 3. ทดสอบ OAuth Flow
+- คลิก "เริ่ม Shopee OAuth"
+- Login ด้วย Test Account
+- เลือก "30 Days" authorization
+- คลิก "Confirm Authorization"
+
+### 4. หากยังมีปัญหา
+- ลองใช้ 0.0.0.0/0 ใน IP Whitelist (สำหรับทดสอบ)
+- ตรวจสอบ Network tab ใน Developer Tools
+- ดู error message ใน Debug Information
 """)
