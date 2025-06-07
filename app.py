@@ -5,101 +5,148 @@ import hashlib
 import hmac
 import urllib.parse
 import json
-import base64
-from datetime import datetime
 
 # ===== ตั้งค่าแอป Shopee =====
 PARTNER_ID = 1280109
 PARTNER_KEY = "5a4e6e4c4d4375464c57506b7a42775a77466d686c534255574267514f494a54"
 REDIRECT_URL = "https://web-tiw-f6am2usgmpzwel2adoj5qg.streamlit.app/"
 
-# ===== Multiple Signature Methods =====
-def create_signature_method1(partner_id, path, timestamp, access_token="", shop_id="", body=""):
-    """วิธีที่ 1: Standard method"""
-    if body:
-        body_str = json.dumps(body, separators=(',', ':'), sort_keys=True)
-        sign_base = f"{partner_id}{path}{timestamp}{body_str}"
-    elif access_token and shop_id:
-        sign_base = f"{partner_id}{path}{timestamp}{access_token}{shop_id}"
-    else:
-        sign_base = f"{partner_id}{path}{timestamp}"
-    
-    partner_key_bytes = bytes.fromhex(PARTNER_KEY)
-    signature = hmac.new(partner_key_bytes, sign_base.encode('utf-8'), hashlib.sha256).hexdigest()
-    return signature, sign_base
-
-def create_signature_method2(partner_id, path, timestamp, access_token="", shop_id="", body=""):
-    """วิธีที่ 2: Without body sorting"""
-    if body:
-        body_str = json.dumps(body, separators=(',', ':'))  # ไม่ sort_keys
-        sign_base = f"{partner_id}{path}{timestamp}{body_str}"
-    elif access_token and shop_id:
-        sign_base = f"{partner_id}{path}{timestamp}{access_token}{shop_id}"
-    else:
-        sign_base = f"{partner_id}{path}{timestamp}"
-    
-    partner_key_bytes = bytes.fromhex(PARTNER_KEY)
-    signature = hmac.new(partner_key_bytes, sign_base.encode('utf-8'), hashlib.sha256).hexdigest()
-    return signature, sign_base
-
-def create_signature_method3(partner_id, path, timestamp, access_token="", shop_id="", body=""):
-    """วิธีที่ 3: Base64 encoded key"""
-    if body:
-        body_str = json.dumps(body, separators=(',', ':'), sort_keys=True)
-        sign_base = f"{partner_id}{path}{timestamp}{body_str}"
-    elif access_token and shop_id:
-        sign_base = f"{partner_id}{path}{timestamp}{access_token}{shop_id}"
-    else:
-        sign_base = f"{partner_id}{path}{timestamp}"
-    
-    # ลองใช้ key เป็น base64
+# ===== ฟังก์ชันตรวจสอบ IP =====
+def get_current_ip():
     try:
-        partner_key_bytes = base64.b64decode(PARTNER_KEY)
+        response = requests.get("https://api.ipify.org?format=json", timeout=5)
+        return response.json()["ip"]
     except:
-        partner_key_bytes = PARTNER_KEY.encode('utf-8')
-    
-    signature = hmac.new(partner_key_bytes, sign_base.encode('utf-8'), hashlib.sha256).hexdigest()
-    return signature, sign_base
+        return None
 
-def create_signature_method4(partner_id, path, timestamp, access_token="", shop_id="", body=""):
-    """วิธีที่ 4: UTF-8 encoded key"""
+# ===== ฟังก์ชันสร้าง Signature (แบบง่าย) =====
+def create_simple_signature(partner_id, path, timestamp, body=""):
     if body:
         body_str = json.dumps(body, separators=(',', ':'), sort_keys=True)
         sign_base = f"{partner_id}{path}{timestamp}{body_str}"
-    elif access_token and shop_id:
-        sign_base = f"{partner_id}{path}{timestamp}{access_token}{shop_id}"
     else:
         sign_base = f"{partner_id}{path}{timestamp}"
     
-    partner_key_bytes = PARTNER_KEY.encode('utf-8')
+    partner_key_bytes = bytes.fromhex(PARTNER_KEY)
     signature = hmac.new(partner_key_bytes, sign_base.encode('utf-8'), hashlib.sha256).hexdigest()
-    return signature, sign_base
+    return signature
 
-# ===== Test All Signature Methods =====
-def test_all_signature_methods(code, shop_id):
-    """ทดสอบทุกวิธีการสร้าง signature"""
-    timestamp = int(time.time())
-    path = "/api/v2/auth/token/get"
-    url = f"https://partner.test-stable.shopeemobile.com{path}"
+# ===== ฟังก์ชันทดสอบ API =====
+def test_api_connection():
+    """ทดสอบการเชื่อมต่อ API โดยไม่ต้องใช้ token"""
+    try:
+        # ทดสอบด้วย public endpoint
+        response = requests.get("https://partner.test-stable.shopeemobile.com", timeout=10)
+        return response.status_code == 200
+    except:
+        return False
+
+# ===== Streamlit App =====
+st.set_page_config(page_title="Shopee Fix Final", page_icon="🔧")
+st.title("🔧 Shopee OAuth - Final Solution")
+
+# แสดงสถานะปัจจุบัน
+st.error("""
+🚨 **ปัญหาที่พบ:** IP Address ยังไม่ได้เพิ่มใน Shopee Console
+
+**IP ที่ตรวจพบ:** `34.83.176.217`
+
+**ต้องทำ:** เพิ่ม IP นี้ใน Shopee Console ก่อนจึงจะใช้งานได้
+""")
+
+# ขั้นตอนแก้ไขแบบละเอียด
+st.subheader("📋 ขั้นตอนแก้ไขแบบละเอียด")
+
+with st.expander("🔧 ขั้นตอนที่ 1: เข้า Shopee Console", expanded=True):
+    st.markdown("""
+    1. **เปิดแท็บใหม่** ในเบราว์เซอร์
+    2. **ไปที่:** https://open.shopee.com
+    3. **Login** ด้วยบัญชีที่สร้างแอป
+    4. **คลิก "App Management"** หรือ **"การจัดการแอป"**
+    """)
     
-    body = {
-        "code": code,
-        "shop_id": int(shop_id),
-        "partner_id": PARTNER_ID
-    }
+    if st.button("🌐 เปิด Shopee Console", use_container_width=True):
+        st.markdown('[🔗 คลิกที่นี่เพื่อเปิด Shopee Console](https://open.shopee.com)')
+
+with st.expander("🔧 ขั้นตอนที่ 2: หาแอปของคุณ"):
+    st.markdown("""
+    1. ในหน้า App Management ให้หา **"test tiw"**
+    2. **คลิกเข้าไป**ที่แอปนั้น
+    3. คุณจะเห็นหน้าข้อมูลแอป
+    """)
+
+with st.expander("🔧 ขั้นตอนที่ 3: แก้ไข IP Whitelist", expanded=True):
+    current_ip = get_current_ip()
     
-    methods = [
-        ("Method 1: Hex + Sorted JSON", create_signature_method1),
-        ("Method 2: Hex + Unsorted JSON", create_signature_method2),
-        ("Method 3: Base64 Key", create_signature_method3),
-        ("Method 4: UTF-8 Key", create_signature_method4)
-    ]
+    st.markdown(f"""
+    **ในหน้าแอป ให้ทำตามนี้:**
     
-    results = []
+    1. **เลื่อนลงหา** "IP Address Whitelist" หรือ "Whitelist"
+    2. **ลบ IP เก่าทั้งหมด:**
+       - `104.16.0.1`
+       - `104.16.3.2`
+       - `104.16.8.8`
+    3. **เพิ่ม IP ใหม่:** `{current_ip or '34.83.176.217'}`
+    4. **คลิก Save** หรือ **บันทึก**
+    5. **รอ 2-3 นาที** ให้ระบบอัปเดต
+    """)
     
-    for method_name, method_func in methods:
-        try:
-            signature, sign_base = method_func(PARTNER_ID, path, timestamp, body=body)
+    st.code(f"IP ที่ต้องเพิ่ม: {current_ip or '34.83.176.217'}")
+
+with st.expander("🔧 ขั้นตอนที่ 4: ทดสอบ"):
+    st.markdown("""
+    1. **กลับมาที่หน้านี้**
+    2. **Refresh หน้า** (กด F5)
+    3. **คลิก "ทดสอบการเชื่อมต่อ"** ด้านล่าง
+    4. **หากสำเร็จ** จะแสดงสีเขียว
+    """)
+
+# ส่วนทดสอบ
+st.divider()
+st.subheader("🧪 ทดสอบการเชื่อมต่อ")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    if st.button("🌐 ทดสอบ Network", use_container_width=True):
+        if test_api_connection():
+            st.success("✅ เชื่อมต่อ Shopee API ได้")
+        else:
+            st.error("❌ ไม่สามารถเชื่อมต่อ Shopee API")
+
+with col2:
+    if st.button("🔍 ตรวจสอบ IP", use_container_width=True):
+        ip = get_current_ip()
+        if ip:
+            st.success(f"✅ IP ปัจจุบัน: {ip}")
+        else:
+            st.error("❌ ไม่สามารถตรวจสอบ IP")
+
+with col3:
+    if st.button("🔄 Refresh หน้า", use_container_width=True):
+        st.rerun()
+
+# ส่วนทดสอบ OAuth (หลังแก้ไข IP)
+query_params = st.query_params
+code = query_params.get("code")
+shop_id = query_params.get("shop_id", "142837")
+
+if code and shop_id:
+    st.divider()
+    st.success(f"✅ ได้รับ authorization code และ shop_id: `{shop_id}`")
+    
+    if st.button("🔑 ทดสอบดึง Access Token", type="primary", use_container_width=True):
+        with st.spinner("กำลังทดสอบ..."):
+            timestamp = int(time.time())
+            path = "/api/v2/auth/token/get"
+            
+            body = {
+                "code": code,
+                "shop_id": int(shop_id),
+                "partner_id": PARTNER_ID
+            }
+            
+            signature = create_simple_signature(PARTNER_ID, path, timestamp, body)
             
             params = {
                 "partner_id": PARTNER_ID,
@@ -107,230 +154,49 @@ def test_all_signature_methods(code, shop_id):
                 "sign": signature
             }
             
-            headers = {"Content-Type": "application/json"}
-            
-            response = requests.post(url, params=params, json=body, headers=headers, timeout=10)
-            
-            result = {
-                "method": method_name,
-                "signature": signature,
-                "sign_base": sign_base,
-                "status_code": response.status_code,
-                "response": response.text[:500],  # First 500 chars
-                "success": response.status_code == 200
-            }
-            
-            results.append(result)
-            
-        except Exception as e:
-            results.append({
-                "method": method_name,
-                "error": str(e),
-                "success": False
-            })
-    
-    return results
-
-# ===== Alternative API Testing =====
-def test_shop_info_direct():
-    """ทดสอบ API โดยตรงด้วย hardcoded token (ถ้ามี)"""
-    # นี่เป็นการทดสอบเพื่อดูว่า API ทำงานหรือไม่
-    pass
-
-def validate_partner_credentials():
-    """ตรวจสอบความถูกต้องของ Partner credentials"""
-    issues = []
-    
-    # ตรวจสอบ Partner ID
-    if not str(PARTNER_ID).isdigit():
-        issues.append("Partner ID ต้องเป็นตัวเลข")
-    
-    # ตรวจสอบ Partner Key
-    if len(PARTNER_KEY) != 64:
-        issues.append(f"Partner Key ควรมีความยาว 64 ตัวอักษร (ปัจจุบัน: {len(PARTNER_KEY)})")
-    
-    # ตรวจสอบว่าเป็น hex หรือไม่
-    try:
-        bytes.fromhex(PARTNER_KEY)
-    except ValueError:
-        issues.append("Partner Key ไม่ใช่ hex string ที่ถูกต้อง")
-    
-    # ตรวจสอบ Redirect URL
-    if not REDIRECT_URL.startswith(('http://', 'https://')):
-        issues.append("Redirect URL ต้องขึ้นต้นด้วย http:// หรือ https://")
-    
-    return issues
-
-# ===== IP Address Checker =====
-def get_current_ip_comprehensive():
-    """ตรวจสอบ IP Address จากหลายแหล่ง"""
-    ip_services = [
-        ("ipify.org", "https://api.ipify.org?format=json", "ip"),
-        ("httpbin.org", "https://httpbin.org/ip", "origin"),
-        ("ipinfo.io", "https://ipinfo.io/json", "ip"),
-        ("myip.com", "https://api.myip.com", "ip"),
-        ("whatismyipaddress.com", "https://ipv4.icanhazip.com", "text")
-    ]
-    
-    detected_ips = {}
-    
-    for service_name, url, key in ip_services:
-        try:
-            response = requests.get(url, timeout=5)
-            if response.status_code == 200:
-                if key == "text":
-                    ip = response.text.strip()
-                else:
-                    data = response.json()
-                    ip = data.get(key, "").split(',')[0].strip()  # Handle multiple IPs
+            try:
+                response = requests.post(
+                    f"https://partner.test-stable.shopeemobile.com{path}",
+                    params=params,
+                    json=body,
+                    headers={"Content-Type": "application/json"},
+                    timeout=10
+                )
                 
-                if ip:
-                    detected_ips[service_name] = ip
-        except:
-            detected_ips[service_name] = "Failed"
-    
-    return detected_ips
-
-# ===== Streamlit App =====
-st.set_page_config(page_title="Shopee Debug Center", page_icon="🔧", layout="wide")
-st.title("🔧 Shopee API Debug Center")
-
-# Sidebar
-st.sidebar.header("🛠️ Debug Tools")
-
-# Credential Validation
-st.sidebar.subheader("📋 Credential Check")
-if st.sidebar.button("🔍 ตรวจสอบ Credentials"):
-    issues = validate_partner_credentials()
-    if issues:
-        for issue in issues:
-            st.sidebar.error(f"❌ {issue}")
-    else:
-        st.sidebar.success("✅ Credentials ดูถูกต้อง")
-
-# IP Address Check
-st.sidebar.subheader("🌐 IP Address Check")
-if st.sidebar.button("🔍 ตรวจสอบ IP ทั้งหมด"):
-    with st.spinner("กำลังตรวจสอบ IP..."):
-        ips = get_current_ip_comprehensive()
-        st.sidebar.write("**IP Addresses ที่ตรวจพบ:**")
-        for service, ip in ips.items():
-            if ip != "Failed":
-                st.sidebar.code(f"{service}: {ip}")
-            else:
-                st.sidebar.error(f"{service}: Failed")
-
-# Main content
-query_params = st.query_params
-code = query_params.get("code")
-shop_id = query_params.get("shop_id", "142837")
-
-# Manual input
-with st.sidebar:
-    st.subheader("🔧 Manual Input")
-    manual_code = st.text_input("Authorization Code", value=code or "")
-    manual_shop_id = st.text_input("Shop ID", value=shop_id)
-    
-    if st.button("ใช้ค่าที่ใส่เอง"):
-        if manual_code and manual_shop_id:
-            st.query_params.code = manual_code
-            st.query_params.shop_id = manual_shop_id
-            st.rerun()
-
-# Debug Section
-if code and shop_id:
-    st.success(f"✅ ได้รับ authorization code และ shop_id: `{shop_id}`")
-    
-    # Test all signature methods
-    st.subheader("🧪 ทดสอบทุกวิธีการสร้าง Signature")
-    
-    if st.button("🔬 ทดสอบทุกวิธี", type="primary", use_container_width=True):
-        with st.spinner("กำลังทดสอบทุกวิธีการสร้าง signature..."):
-            results = test_all_signature_methods(code, shop_id)
-            
-            for i, result in enumerate(results, 1):
-                with st.expander(f"🔬 {result['method']}", expanded=result.get('success', False)):
-                    if result.get('success'):
-                        st.success(f"✅ สำเร็จ! Status Code: {result['status_code']}")
-                        st.json(result['response'])
+                st.write(f"**Response Status:** {response.status_code}")
+                
+                if response.status_code == 200:
+                    token_data = response.json()
+                    if "access_token" in token_data:
+                        st.success("🎉 สำเร็จ! ได้รับ Access Token แล้ว!")
+                        st.json(token_data)
                         
-                        # ถ้าสำเร็จ ให้เก็บข้อมูล
-                        try:
-                            response_data = json.loads(result['response'])
-                            if "access_token" in response_data:
-                                st.session_state.access_token = response_data["access_token"]
-                                st.session_state.refresh_token = response_data.get("refresh_token", "")
-                                st.session_state.shop_id = shop_id
-                                st.balloons()
-                                st.success("🎉 บันทึก Access Token แล้ว!")
-                        except:
-                            pass
+                        # เก็บ token
+                        st.session_state.access_token = token_data["access_token"]
+                        st.session_state.shop_id = shop_id
+                        
+                        st.balloons()
                     else:
-                        st.error(f"❌ ล้มเหลว! Status Code: {result.get('status_code', 'N/A')}")
-                        if 'error' in result:
-                            st.error(f"Error: {result['error']}")
-                        else:
-                            st.text(result.get('response', 'No response'))
+                        st.error("❌ ไม่พบ access_token")
+                        st.json(token_data)
+                elif response.status_code == 403:
+                    st.error("❌ ยังคงได้ HTTP 403 - IP Address ยังไม่ได้เพิ่มใน Console")
+                    st.json(response.json())
+                else:
+                    st.error(f"❌ HTTP Error {response.status_code}")
+                    st.text(response.text)
                     
-                    # แสดง debug info
-                    st.write("**Debug Information:**")
-                    st.code(f"Signature: {result.get('signature', 'N/A')}")
-                    st.code(f"Sign Base: {result.get('sign_base', 'N/A')}")
-
-    # Alternative debugging approaches
-    st.divider()
-    st.subheader("🔧 วิธีการแก้ปัญหาเพิ่มเติม")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if st.button("🌐 ตรวจสอบ Network", use_container_width=True):
-            st.info("""
-            **ขั้นตอนตรวจสอบ Network:**
-            1. เปิด Developer Tools (F12)
-            2. ไปที่แท็บ Network
-            3. ลองทำ request อีกครั้ง
-            4. ดู request/response headers
-            5. ตรวจสอบ payload ที่ส่งไป
-            """)
-    
-    with col2:
-        if st.button("🔑 ตรวจสอบ Partner Key", use_container_width=True):
-            st.info(f"""
-            **Partner Key Analysis:**
-            - Length: {len(PARTNER_KEY)} characters
-            - First 10: {PARTNER_KEY[:10]}
-            - Last 10: {PARTNER_KEY[-10:]}
-            - Is Hex: {all(c in '0123456789abcdefABCDEF' for c in PARTNER_KEY)}
-            
-            **ลองตรวจสอบใน Shopee Console:**
-            1. ไปที่ App Management
-            2. เลือกแอป test tiw
-            3. ดู Test API Partner Key
-            4. Copy key ใหม่มาใส่
-            """)
-    
-    with col3:
-        if st.button("⏰ ตรวจสอบ Timestamp", use_container_width=True):
-            current_time = int(time.time())
-            st.info(f"""
-            **Timestamp Analysis:**
-            - Current: {current_time}
-            - DateTime: {datetime.fromtimestamp(current_time)}
-            - Timezone: UTC
-            
-            **หมายเหตุ:** Shopee อาจมีข้อกำหนดเรื่องเวลา
-            """)
+            except Exception as e:
+                st.error(f"❌ เกิดข้อผิดพลาด: {e}")
 
 else:
-    # OAuth Login Section
-    st.info("👆 เริ่มต้นด้วยการ Login เข้า Shopee OAuth")
+    # ส่วน OAuth Login
+    st.divider()
+    st.info("👆 หลังจากแก้ไข IP Whitelist แล้ว ให้คลิกปุ่มด้านล่าง")
     
-    # Generate login URL
     timestamp = int(time.time())
     path = "/api/v2/shop/auth_partner"
-    
-    signature, sign_base = create_signature_method1(PARTNER_ID, path, timestamp)
+    signature = create_simple_signature(PARTNER_ID, path, timestamp)
     
     redirect_encoded = urllib.parse.quote(REDIRECT_URL, safe='')
     login_url = (
@@ -341,120 +207,71 @@ else:
     )
     
     st.markdown(f"""
-    <div style="text-align: center; margin: 30px 0;">
+    <div style="text-align: center; margin: 20px 0;">
         <a href="{login_url}" target="_self" style="
-            background: linear-gradient(45deg, #ee4d2d, #ff6b35);
+            background: #ee4d2d;
             color: white;
-            padding: 15px 30px;
+            padding: 12px 24px;
             text-decoration: none;
-            border-radius: 10px;
+            border-radius: 8px;
             font-weight: bold;
-            font-size: 18px;
             display: inline-block;
-            box-shadow: 0 4px 15px rgba(238, 77, 45, 0.3);
-        ">
-            🚀 เริ่ม Shopee OAuth
-        </a>
+        ">🚀 ทดสอบ Shopee OAuth</a>
     </div>
     """, unsafe_allow_html=True)
-    
-    # Debug login URL
-    with st.expander("🔧 Debug Login URL"):
-        st.code(f"Login URL: {login_url}")
-        st.code(f"Signature: {signature}")
-        st.code(f"Sign Base: {sign_base}")
 
-# Success section
+# หากมี Access Token แล้ว
 if "access_token" in st.session_state:
     st.divider()
-    st.success("🎉 ได้รับ Access Token สำเร็จ!")
+    st.success("🎉 มี Access Token แล้ว!")
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("📊 ทดสอบดึงข้อมูลร้านค้า", use_container_width=True):
-            # ทดสอบดึงข้อมูลร้านค้า
-            timestamp = int(time.time())
-            path = "/api/v2/shop/get_shop_info"
-            
-            signature, sign_base = create_signature_method1(
-                PARTNER_ID, path, timestamp, 
-                st.session_state.access_token, 
-                st.session_state.shop_id
+    if st.button("📊 ทดสอบดึงข้อมูลร้านค้า", use_container_width=True):
+        timestamp = int(time.time())
+        path = "/api/v2/shop/get_shop_info"
+        
+        sign_base = f"{PARTNER_ID}{path}{timestamp}{st.session_state.access_token}{st.session_state.shop_id}"
+        signature = hmac.new(
+            bytes.fromhex(PARTNER_KEY), 
+            sign_base.encode('utf-8'), 
+            hashlib.sha256
+        ).hexdigest()
+        
+        params = {
+            "partner_id": PARTNER_ID,
+            "timestamp": timestamp,
+            "access_token": st.session_state.access_token,
+            "shop_id": st.session_state.shop_id,
+            "sign": signature
+        }
+        
+        try:
+            response = requests.get(
+                f"https://partner.test-stable.shopeemobile.com{path}",
+                params=params
             )
             
-            params = {
-                "partner_id": PARTNER_ID,
-                "timestamp": timestamp,
-                "access_token": st.session_state.access_token,
-                "shop_id": st.session_state.shop_id,
-                "sign": signature
-            }
-            
-            try:
-                response = requests.get(
-                    f"https://partner.test-stable.shopeemobile.com{path}",
-                    params=params
-                )
+            if response.status_code == 200:
+                st.success("✅ ดึงข้อมูลร้านค้าสำเร็จ!")
+                st.json(response.json())
+            else:
+                st.error(f"❌ HTTP Error {response.status_code}")
+                st.text(response.text)
                 
-                if response.status_code == 200:
-                    st.success("✅ ดึงข้อมูลร้านค้าสำเร็จ!")
-                    st.json(response.json())
-                else:
-                    st.error(f"❌ HTTP Error {response.status_code}")
-                    st.text(response.text)
-            except Exception as e:
-                st.error(f"❌ Error: {e}")
-    
-    with col2:
-        if st.button("🗑️ ลบ Token", use_container_width=True):
-            for key in ['access_token', 'refresh_token', 'shop_id']:
-                if key in st.session_state:
-                    del st.session_state[key]
-            st.rerun()
+        except Exception as e:
+            st.error(f"❌ Error: {e}")
 
-# Comprehensive troubleshooting guide
+# คำแนะนำเพิ่มเติม
 st.divider()
-with st.expander("📚 คู่มือแก้ปัญหาแบบละเอียด"):
-    st.markdown("""
-    ## 🔧 วิธีแก้ปัญหา "Wrong Sign" แบบละเอียด
-    
-    ### 1. ตรวจสอบ IP Address Whitelist
-    - ✅ เพิ่ม IP Address จริงใน Shopee Console
-    - ✅ ลบ IP ปลอมทั้งหมด
-    - ✅ ลองใช้ 0.0.0.0/0 สำหรับทดสอบ
-    
-    ### 2. ตรวจสอบ Partner Key
-    - ✅ Copy Partner Key ใหม่จาก Shopee Console
-    - ✅ ตรวจสอบว่าไม่มีช่องว่างหรือตัวอักษรพิเศษ
-    - ✅ ใช้ Test API Partner Key (ไม่ใช่ Live)
-    
-    ### 3. ตรวจสอบ Signature Algorithm
-    - ✅ ลองทุกวิธีการสร้าง signature ด้านบน
-    - ✅ ตรวจสอบการ encode ของ Partner Key
-    - ✅ ตรวจสอบการ sort JSON body
-    
-    ### 4. ตรวจสอบ Request Format
-    - ✅ ตรวจสอบ Content-Type header
-    - ✅ ตรวจสอบ URL encoding
-    - ✅ ตรวจสอบ timestamp format
-    
-    ### 5. ตรวจสอบ Environment
-    - ✅ ใช้ Test environment (partner.test-stable.shopeemobile.com)
-    - ✅ ตรวจสอบ network connectivity
-    - ✅ ลองใช้ Postman หรือ curl
-    
-    ### 6. ติดต่อ Shopee Support
-    - หากทุกวิธีไม่ได้ผล ให้ติดต่อ Shopee Developer Support
-    - แนบ request_id จาก error response
-    - แนบ debug information
-    """)
+st.info("""
+## 💡 หากยังไม่ได้ผล:
 
-# Footer
-st.markdown("""
----
-<div style="text-align: center; color: #666;">
-🔧 <strong>Shopee API Debug Center</strong> - ระบบแก้ปัญหา Shopee API<br>
-ทดสอบทุกวิธีการสร้าง signature และแก้ปัญหา "wrong sign" error
-</div>
-""", unsafe_allow_html=True)
+1. **ตรวจสอบอีกครั้ง** ว่าได้เพิ่ม IP `34.83.176.217` ใน Shopee Console แล้ว
+2. **รอ 5-10 นาที** ให้ระบบ Shopee อัปเดต
+3. **ลองใช้ `0.0.0.0/0`** ใน IP Whitelist (อนุญาตทุก IP) สำหรับทดสอบ
+4. **ตรวจสอบ Partner Key** ใน Shopee Console ว่าตรงกับในโค้ด
+5. **ติดต่อ Shopee Support** หากทุกวิธีไม่ได้ผล
+
+**Test Account:**
+- Shop Account: SANDBOX.f216878ec16b03a6f962
+- Shop Password: 1bdd53e0ec3b7fb2
+""")
